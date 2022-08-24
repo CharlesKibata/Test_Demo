@@ -1,0 +1,271 @@
+---
+title: "Untitled"
+author: '.'
+date: "2022-08-20"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+ 
+```{r} 
+ # claneing the  memory
+rm(list=ls())
+#setting the working directory
+setwd("C:/Users/user/Desktop/canny brain/Mee/Jully/F2212098 V1")
+# loading the libraries
+library(readr)
+library(car)
+library(MASS)
+library(ggplot2)
+library(tidyverse)
+library(reshape2)
+library(dplyr)
+library(plyr)
+library(ggpubr)
+library(knitr)
+
+```
+
+```{r} 
+# loading the data
+data<-read_csv("sales_data_sample (2).csv")
+attach(data)
+# Data preprocessing
+str(data)
+```
+
+
+# making the ORDERDATE  as date data type
+
+```{r} 
+data$ORDERDATE<-as.Date(data$ORDERDATE, format="%m/%d/%y  %H:%M")
+# removing some column
+data<-select(data,-c(
+  'PHONE','ADDRESSLINE1','ADDRESSLINE2','STATE','POSTALCODE','TERRITORY','CONTACTLASTNAME','CONTACTFIRSTNAME'
+))
+
+```
+
+```{r} 
+# Summary of the data
+summary(data)
+
+colSums(is.na(data))
+# summary of the data
+```
+# Distributions
+
+
+```{r} 
+#categorical
+table(data$STATUS)
+table(data$MONTH_ID)
+table(data$YEAR_ID)
+table(data$PRODUCTLINE)
+table(data$COUNTRY)
+table(data$DEALSIZE)
+# Continous variable
+a=ggplot(data,aes(QUANTITYORDERED))+geom_histogram()
+b=ggplot(data,aes(PRICEEACH))+geom_histogram()
+c=ggplot(data,aes(SALES))+geom_histogram()
+ggarrange(a,c,b + rremove("x.text"), 
+          labels = c("A", "B", "C"),
+          ncol = 2, nrow = 2)
+
+
+```
+
+```{r} 
+
+# producline by price
+df<-data %>% group_by(PRODUCTLINE) %>%
+  summarise_at(vars(PRICEEACH),list(sum=mean))%>%
+  arrange(desc(sum))
+df
+
+ggplot(df,aes(x=reorder(PRODUCTLINE,-sum),y=sum))+geom_bar(stat = 'identity')+xlab("Productline ")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+ylab(" PRICE of EACH Quanity ")
+
+# producline by quantity orderd
+df<-data %>% group_by(PRODUCTLINE) %>%
+  summarise_at(vars(QUANTITYORDERED),list(sum=sum))%>%
+  arrange(desc(sum))
+df
+
+ggplot(df,aes(x=reorder(PRODUCTLINE,-sum),y=sum))+geom_bar(stat = 'identity')+xlab("Productline ")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+ylab(" QUANTITY ORDERED")
+
+```
+
+
+
+
+# The summary of the product Code by quantity
+
+```{r} 
+# producline by PRICEEACH
+df<-data %>% group_by(PRODUCTCODE) %>%
+  summarise_at(vars(PRICEEACH),list(sum=mean))%>%
+  arrange(desc(sum))
+df
+
+b=ggplot(head(df,5),aes(x=reorder(PRODUCTCODE,-sum),y=sum))+geom_bar(stat = 'identity')+xlab("PRODUCT CODE ")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+ylab(" Average price Per Quanitity")
+
+# producline by quantity orderd
+df<-data %>% group_by(PRODUCTCODE) %>%
+  summarise_at(vars(QUANTITYORDERED),list(sum=sum))%>%
+  arrange(desc(sum))
+df
+
+a=ggplot(head(df),aes(x=reorder(PRODUCTCODE,-sum),y=sum))+geom_bar(stat = 'identity')+xlab("PRODUCT CODE ")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+ylab(" QUANTITY ORDERED")
+
+ggarrange(b,a,b + rremove("x.text"), 
+          labels = c("A", "B","C"),
+          ncol = 2, nrow = 2)
+```
+
+################################################################################################################
+
+
+```{r} 
+# Anual sales
+
+kable(data %>% group_by(YEAR_ID) %>%
+        summarise_at(vars(SALES),list(sum=sum))%>%
+        arrange(desc(sum)))
+ggplot(data,aes(factor(YEAR_ID),SALES))+geom_bar(stat = 'identity')+xlab("Year ")
+
+df <- data %>%
+  select(ORDERDATE, SALES) %>%
+  gather(key = "variable", value = "value", -ORDERDATE)
+
+#  line plot
+ggplot(df, aes(x = ORDERDATE, y = value)) + 
+  geom_line(aes(color = variable), size = 1) +
+  scale_color_manual(values = c("#00AFBB")) +
+  theme_minimal()+ylab(" Sales")
+```
+
+################################################################################################################
+
+
+# 3.	What is the Monthly Revenue?
+
+```{r} 
+kable(data %>% group_by(MONTH_ID) %>%
+        summarise_at(vars(SALES),list(sum=sum))%>%
+        arrange(desc(-MONTH_ID)))
+df3<-data%>% group_by(YEAR_ID,MONTH_ID)%>%summarise_at(vars(SALES),list(sum=sum))
+
+ggplot(data,aes(factor(MONTH_ID),SALES))+geom_bar(stat = "identity")+xlab("Months ")
+
+ggplot(data=df3, aes(x=factor(MONTH_ID), y=sum, group=1)) +
+  facet_wrap(~YEAR_ID)+
+  geom_line()+
+  geom_point()+xlab("Month Id")
+
+
+
+```
+################################################################################################################
+
+#4.	What is the Monthly Revenue growth rate?
+```{r} 
+df2<-data %>% group_by(MONTH_ID) %>%
+  summarise_at(vars(SALES),list(sum=sum))%>%
+  arrange(desc(-MONTH_ID))
+rate=NULL
+ 
+for (i in 2:nrow(df2)) {
+  rate[1]=0
+  rate[i]=(df2$sum[i]-df2$sum[i-1])/(df2$sum[i-1])*100
+ 
+  
+}
+df2$rate<-rate
+df2
+ggplot(df2,aes(factor(MONTH_ID),rate))+
+  geom_bar(stat = 'identity')+xlab("MONTH_ID ")+
+  ylab("Monthly Revenue growth rate")
+```
+
+
+################################################################################################################
+
+#5.	Top 10 countries by Sales and city
+# by sales
+
+```{r} 
+df4<-data%>%group_by(COUNTRY)%>%
+  summarise_at(vars(SALES),list(sum=sum))%>%
+  arrange(desc(sum))
+df4
+
+
+# 
+ggplot(df4,aes(x=reorder(COUNTRY,-sum),sum))+geom_bar(stat = "identity")+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+xlab("Country")
+
+
+# Summary by country and  city
+df6<-data%>%group_by(COUNTRY,CITY)%>%
+  summarise_at(vars(SALES),list(sum=sum))%>%
+  arrange(desc(sum))
+head(df6,10)
+ggplot(head(df6,10),aes(x=reorder(CITY,-sum),sum,fill=COUNTRY))+geom_bar(stat = "identity")+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+xlab("CITY")
+```
+
+
+################################################################################################################
+
+# 6.	What is the Average Sales per Order?
+# order line
+
+```{r} 
+kable(data%>%group_by(ORDERLINENUMBER)%>%
+        summarise_at(vars(SALES),list(mean=mean))%>%
+        arrange(desc(mean)))
+```
+
+################################################################################################################
+
+#7.	How many Monthly Active Customers is there
+
+
+```{r} 
+kable(data %>% group_by(STATUS,MONTH_ID,YEAR_ID)%>%
+        filter(STATUS=="In Process")%>%
+        dplyr::summarize(counts=n()))
+
+```
+
+
+################################################################################################################
+
+# 8.	What is the New Customers Growth Rate?
+
+
+```{r} 
+
+df=data %>% group_by(YEAR_ID,MONTH_ID)%>%
+  dplyr::summarize(counts=n())
+rate=NULL
+
+for (i in 2:nrow(df)) {
+  rate[1]=0
+  rate[i]=(df$counts[i]-df$counts[i-1])/(df$counts[i-1])*100
+  
+  
+}
+df$rate<-rate
+kable(df)
+ 
+ggplot(df,aes(factor(MONTH_ID),rate,fill=factor(YEAR_ID)))+
+  geom_bar(stat = "identity",position = position_dodge())+xlab("Month")
+
+```
